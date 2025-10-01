@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Blaze Group Prayer Notebook</title>
+  <style>
+    :root{
+      --bg:#7f1d1d; /* warm red base */
+      --ink:#1f1f1f; /* dark text for white cards */
+      --muted:#7f1d1d; /* muted warm tone */
+      --accent:#dc2626; /* red accent */
+      --warn:#b91c1c; /* warn red */
+      --ring:#fb923c; /* orange ring */
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background:linear-gradient(180deg,#7f1d1d, #991b1b 50%, #7f1d1d 100%);
+      color:var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Apple Color Emoji", "Segoe UI Emoji";
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    header{position:sticky; top:0; z-index:10; backdrop-filter:saturate(140%) blur(8px); background:rgba(127,29,29,.85); border-bottom:1px solid rgba(254,202,202,.3); color:white}
+    .wrap{max-width:1100px; margin:0 auto; padding:16px}
+    h1{margin:0; font-size:clamp(18px,2.8vw,28px)}
+    .sub{color:#ffe4e6; font-size:12px}
+    .toolbar{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+    button{appearance:none; border:1px solid rgba(254,202,202,.25); color:white; background:rgba(153,27,27,.8); padding:10px 12px; border-radius:12px; cursor:pointer; font-weight:600; -webkit-tap-highlight-color:transparent}
+    button:hover{border-color:var(--ring)}
+    button.warn{border-color:transparent; background:linear-gradient(135deg,#dc2626,#fb923c); color:#fff}
+
+    .grid{display:grid; gap:12px; grid-template-columns:repeat( auto-fill, minmax(260px, 1fr) ); padding:16px}
+    .card{background:#ffffff; border:1px solid #fca5a5; border-radius:16px; padding:14px; display:flex; flex-direction:column; gap:10px; min-height:180px; color:var(--ink)}
+    .row{display:flex; gap:8px; align-items:center}
+    .idx{display:inline-grid; place-items:center; width:24px; height:24px; border-radius:8px; background:rgba(220,38,38,.25); color:#991b1b; font-size:12px; font-weight:800}
+
+    input, textarea{font-size:15px; touch-action:manipulation; color:var(--ink)}
+    .title{width:100%; background:#fff; border:1px solid #fca5a5; border-radius:10px; padding:10px 12px; color:var(--ink); outline:none}
+    .title:focus, .note:focus{border-color:var(--ring); box-shadow:0 0 0 3px rgba(251,146,60,.35)}
+    .note{resize:vertical; min-height:88px; max-height:320px; width:100%; background:#fff; border:1px solid #fca5a5; border-radius:10px; padding:12px; color:var(--ink); outline:none}
+    .meta{display:flex; gap:8px; align-items:center; justify-content:flex-end; color:var(--muted); font-size:12px}
+    .date{background:#fff; border:1px solid #fca5a5; border-radius:8px; color:var(--ink); padding:8px}
+    footer{color:#fecaca; text-align:center; padding:24px}
+    .saved{font-variant-numeric:tabular-nums}
+    .label-due{margin-right:4px; font-size:12px; color:#7f1d1d}
+
+    /* ===== スマホ最適化 ===== */
+    @media (max-width: 640px){
+      .wrap{padding:12px}
+      .toolbar{gap:6px}
+      button{padding:12px 14px; border-radius:14px}
+      .grid{grid-template-columns:1fr; gap:10px; padding:12px}
+      .card{padding:12px; border-radius:14px}
+      .idx{width:28px; height:28px}
+      input, textarea{font-size:16px}
+      .title{padding:12px 14px}
+      .note{min-height:110px; padding:12px 14px}
+      .date{padding:10px; font-size:16px}
+      .meta{flex-direction:column; align-items:flex-end; gap:8px}
+      .label-due{min-width:64px}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>Blaze Group Prayer Notebook</h1>
+      <div class="sub">ブラウザの <code>localStorage</code> に自動保存。データはこの端末・このブラウザのみに保存されます。</div>
+      <div class="toolbar">
+        <button id="printBtn" title="印刷やPDF保存">印刷 / PDF</button>
+        <button id="clearBtn" class="warn" title="全削除（取り消し不可）">全データ削除</button>
+        <span class="saved" id="savedAt" style="margin-left:auto">未保存</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="grid" id="grid"></div>
+  </main>
+
+  <footer>
+    作成: あなた / 保管: このブラウザ内 / バージョン <span id="ver">1.0.0</span>
+  </footer>
+
+<script>
+(function(){
+  const VERSION = '1.0.0';
+  const KEY = 'goalboard-v1';
+  const COUNT = 25; // カード数
+  const grid = document.getElementById('grid');
+  const savedAtEl = document.getElementById('savedAt');
+
+  const defaultItem = (i)=>({
+    id:i, title:'', note:'', due:'', updatedAt:Date.now()
+  });
+
+  function load(){
+    try{
+      const raw = localStorage.getItem(KEY);
+      if(!raw){
+        return Array.from({length:COUNT}, (_,i)=>defaultItem(i+1));
+      }
+      const data = JSON.parse(raw);
+      for(let i=1;i<=COUNT;i++){
+        if(!data[i-1]) data[i-1]=defaultItem(i);
+        data[i-1].id = i;
+        data[i-1].title ??='';
+        data[i-1].note  ??='';
+        data[i-1].due   ??='';
+        data[i-1].updatedAt ||= Date.now();
+      }
+      return data.slice(0, COUNT);
+    }catch(e){
+      console.error('load failed', e);
+      return Array.from({length:COUNT}, (_,i)=>defaultItem(i+1));
+    }
+  }
+
+  let state = load();
+
+  function save(){
+    localStorage.setItem(KEY, JSON.stringify(state));
+    savedAtEl.textContent = '保存: ' + new Date().toLocaleString();
+  }
+
+  function createCard(item){
+    const card = document.createElement('section');
+    card.className = 'card';
+    card.dataset.idx = item.id;
+
+    const rowTop = document.createElement('div');
+    rowTop.className = 'row';
+
+    const idx = document.createElement('div');
+    idx.className = 'idx';
+    idx.textContent = item.id;
+
+    const title = document.createElement('input');
+    title.className = 'title';
+    title.placeholder = '目標';
+    title.value = item.title;
+
+    rowTop.append(idx, title);
+
+    const note = document.createElement('textarea');
+    note.className = 'note';
+    note.placeholder = '具体的なアクションプラン';
+    note.value = item.note;
+    const autoresize = (el)=>{ el.style.height='auto'; el.style.height=Math.min(320, el.scrollHeight)+'px'; };
+    autoresize(note);
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+
+    const dueLabel = document.createElement('span');
+    dueLabel.className = 'label-due';
+    dueLabel.textContent = '確約日:';
+
+    const due = document.createElement('input');
+    due.type = 'date';
+    due.className = 'date';
+    if(item.due) due.value = item.due;
+
+    meta.append(dueLabel, due);
+
+    title.addEventListener('input', () => update(item.id, {title:title.value}));
+    note.addEventListener('input', () => { autoresize(note); update(item.id, {note:note.value}); });
+    due.addEventListener('change', () => update(item.id, {due:due.value}));
+
+    card.append(rowTop, note, meta);
+    return card;
+  }
+
+  function render(){
+    grid.innerHTML = '';
+    state.forEach(item=> grid.appendChild(createCard(item)) );
+  }
+
+  function update(id, patch){
+    const idx = id-1;
+    state[idx] = {...state[idx], ...patch, updatedAt:Date.now()};
+    save();
+  }
+
+  document.getElementById('clearBtn').addEventListener('click', ()=>{
+    if(!confirm('本当に全データを削除しますか？ この操作は取り消せません。')) return;
+    localStorage.removeItem(KEY);
+    state = load();
+    render();
+    savedAtEl.textContent = 'データを削除しました';
+  });
+
+  document.getElementById('printBtn').addEventListener('click', ()=> window.print());
+
+  render();
+  savedAtEl.textContent = localStorage.getItem(KEY) ? ('保存: ' + new Date().toLocaleString()) : '新規ボード';
+})();
+</script>
+</body>
+</html>
